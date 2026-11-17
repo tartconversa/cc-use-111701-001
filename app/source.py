@@ -18,8 +18,26 @@ class Response:
     def sha256(self):
         return hashlib.sha256(self.body).hexdigest()
 
+    @property
+    def response_id(self):
+        """完整响应身份：状态码与实体联合摘要。
+
+        同字节实体在不同状态码下是语义不同的响应（如 200 正文与 500
+        错误页），原件存储必须分别留痕，不能因 body 相同而互相覆盖。
+        """
+        material = json.dumps(
+            {'status': self.status, 'body_sha256': self.sha256},
+            sort_keys=True, separators=(',', ':')).encode('utf-8')
+        return hashlib.sha256(material).hexdigest()
+
     def header(self, name):
         return next((v for k,v in self.headers if k.lower()==name.lower()), None)
+
+def to_packet(response):
+    """把响应还原为可独立重放的来源报文。"""
+    return {'source_id':response.source_id,'url':response.url,'status':response.status,
+            'headers':[[k,v] for k,v in response.headers],
+            'body_base64':base64.b64encode(response.body).decode('ascii')}
 
 def from_packet(packet):
     if not isinstance(packet.get('source_id'),str) or not packet['source_id']:
